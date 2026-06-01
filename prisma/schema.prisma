@@ -1,0 +1,342 @@
+// This is your Prisma schema file for StickerVault
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USER & AUTH
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  STAFF
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(STAFF)
+  avatar        String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  activityLogs  ActivityLog[]
+  createdOrders Order[]       @relation("CreatedBy")
+  stockMovements StockMovement[]
+
+  @@map("users")
+}
+
+// ============================================================
+// PRODUCT CATEGORIES
+// ============================================================
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  color       String    @default("#6366f1")
+  icon        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+// ============================================================
+// PRODUCTS & INVENTORY
+// ============================================================
+
+enum ProductType {
+  INDIVIDUAL_STICKER
+  STICKER_PACK
+  CUSTOM_ORDER
+  MATERIAL_VINYL
+  MATERIAL_LAMINATE
+  MATERIAL_PACKAGING
+  MATERIAL_INK
+  MATERIAL_OTHER
+}
+
+enum StockStatus {
+  IN_STOCK
+  LOW_STOCK
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+model Product {
+  id              String      @id @default(cuid())
+  sku             String      @unique
+  name            String
+  description     String?
+  productType     ProductType @default(INDIVIDUAL_STICKER)
+  categoryId      String?
+  
+  // Pricing
+  costPrice       Decimal     @default(0) @db.Decimal(10, 2)
+  salePrice       Decimal     @default(0) @db.Decimal(10, 2)
+  
+  // Stock
+  currentStock    Int         @default(0)
+  minStockLevel   Int         @default(5)
+  maxStockLevel   Int         @default(100)
+  stockStatus     StockStatus @default(IN_STOCK)
+  
+  // Media
+  imageUrl        String?
+  
+  // Barcode
+  barcode         String      @unique
+  qrCode          String?     // stored as data URI or file path
+  
+  // Physical attributes (for stickers)
+  width           Decimal?    @db.Decimal(8, 2)
+  height          Decimal?    @db.Decimal(8, 2)
+  unit            String?     @default("mm")
+  
+  // Metadata
+  tags            String[]    @default([])
+  notes           String?
+  isActive        Boolean     @default(true)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  category        Category?   @relation(fields: [categoryId], references: [id])
+  stockMovements  StockMovement[]
+  orderItems      OrderItem[]
+  productionItems ProductionItem[]
+
+  @@index([sku])
+  @@index([barcode])
+  @@index([stockStatus])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// ============================================================
+// STOCK MOVEMENTS
+// ============================================================
+
+enum MovementType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  DAMAGED
+  RETURNED
+  AUDIT
+  ORDER_FULFILLED
+  PRODUCTION_USED
+}
+
+model StockMovement {
+  id          String       @id @default(cuid())
+  productId   String
+  userId      String
+  type        MovementType
+  quantity    Int
+  previousStock Int
+  newStock    Int
+  reference   String?      // order ID, PO number, etc.
+  reason      String?
+  notes       String?
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@index([productId])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// ============================================================
+// ORDERS
+// ============================================================
+
+enum OrderStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  IN_PRODUCTION
+  READY_TO_PACK
+  PACKED
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  
+  // Customer
+  customerName    String
+  customerEmail   String?
+  customerPhone   String?
+  customerAddress String?
+  
+  // Status
+  status          OrderStatus @default(PENDING)
+  
+  // Pricing
+  subtotal        Decimal     @default(0) @db.Decimal(10, 2)
+  discount        Decimal     @default(0) @db.Decimal(10, 2)
+  total           Decimal     @default(0) @db.Decimal(10, 2)
+  
+  // Metadata
+  notes           String?
+  isCustomOrder   Boolean     @default(false)
+  dueDate         DateTime?
+  packedAt        DateTime?
+  dispatchedAt    DateTime?
+  completedAt     DateTime?
+  
+  createdById     String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  createdBy       User        @relation("CreatedBy", fields: [createdById], references: [id])
+  items           OrderItem[]
+  productionJob   ProductionJob?
+
+  @@index([orderNumber])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int
+  unitPrice   Decimal @db.Decimal(10, 2)
+  totalPrice  Decimal @db.Decimal(10, 2)
+  notes       String?
+  isPacked    Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ============================================================
+// PRODUCTION
+// ============================================================
+
+enum ProductionStatus {
+  QUEUED
+  READY_TO_PRINT
+  PRINTING
+  LAMINATING
+  CUTTING
+  PACKAGING
+  COMPLETED
+  CANCELLED
+}
+
+model ProductionJob {
+  id          String           @id @default(cuid())
+  jobNumber   String           @unique
+  orderId     String?          @unique
+  title       String
+  status      ProductionStatus @default(QUEUED)
+  priority    Int              @default(0)
+  notes       String?
+  
+  startedAt   DateTime?
+  completedAt DateTime?
+  dueDate     DateTime?
+  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relations
+  order       Order?           @relation(fields: [orderId], references: [id])
+  items       ProductionItem[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("production_jobs")
+}
+
+model ProductionItem {
+  id              String        @id @default(cuid())
+  productionJobId String
+  productId       String
+  quantity        Int
+  quantityDone    Int           @default(0)
+  notes           String?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  productionJob   ProductionJob @relation(fields: [productionJobId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
+
+  @@map("production_items")
+}
+
+// ============================================================
+// ACTIVITY LOG
+// ============================================================
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  entity      String   // "product", "order", "production", etc.
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

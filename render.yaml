@@ -1,0 +1,38 @@
+services:
+  # Web Service
+  - type: web
+    name: stickervault
+    runtime: node
+    region: frankfurt
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stickervault-db
+          property: connectionString
+      - key: NEXTAUTH_URL
+        sync: false
+      - key: NEXTAUTH_SECRET
+        generateValue: true
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_NAME
+        value: StickerVault
+    autoDeploy: true
+    scaling:
+      minInstances: 1
+      maxInstances: 3
+
+  # Database
+databases:
+  - name: stickervault-db
+    region: frankfurt
+    plan: starter
+    databaseName: stickervault
+    user: stickervault_user
+    postgresMajorVersion: 16
