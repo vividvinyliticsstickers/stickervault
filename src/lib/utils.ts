@@ -116,3 +116,7 @@ export function humanizeStatus(status: string): string {
 export function calculateInventoryValue(products: Array<{ currentStock: number; costPrice: any }>): number {
   return products.reduce((sum, p) => sum + p.currentStock * parseFloat(p.costPrice?.toString() || '0'), 0)
 }
+
+export function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(" ");
+}
