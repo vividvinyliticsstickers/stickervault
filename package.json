@@ -4,7 +4,7 @@
   "description": "Inventory Management System for Vinyl Sticker Business",
   "private": false,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node index.js",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
